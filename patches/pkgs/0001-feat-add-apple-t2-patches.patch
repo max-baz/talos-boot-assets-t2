@@ -1,20 +1,10 @@
-From 46161fffa7dc9a891b963de4a83931798e22ff6c Mon Sep 17 00:00:00 2001
-From: Steven Kreitzer <skre@skre.me>
-Date: Mon, 23 Sep 2024 10:55:12 -0500
-Subject: [PATCH] feat: add apple t2 patches
-
----
- kernel/build/pkg.yaml   |  5 +++++
- kernel/prepare/pkg.yaml | 12 ++++++++++++
- 2 files changed, 17 insertions(+)
-
 diff --git a/kernel/build/pkg.yaml b/kernel/build/pkg.yaml
-index 4a4c5ce..29ebff1 100644
+index f797dd4..5dea289 100644
 --- a/kernel/build/pkg.yaml
 +++ b/kernel/build/pkg.yaml
-@@ -17,6 +17,11 @@ steps:
-         for patch in $(find /pkg/patches -type f -name "*.patch" | sort); do
+@@ -18,6 +18,11 @@ steps:
            patch -p1 < $patch || (echo "Failed to apply patch $patch" && exit 1)
+           echo "Applied patch $patch"
          done
 +      - |
 +        cd /src
@@ -25,23 +15,23 @@ index 4a4c5ce..29ebff1 100644
        {{ if .BUILD_ARG_KERNEL_TARGET }}
        - |
 diff --git a/kernel/prepare/pkg.yaml b/kernel/prepare/pkg.yaml
-index f82ddcf..8f8f633 100644
+index 6408110..7242354 100644
 --- a/kernel/prepare/pkg.yaml
 +++ b/kernel/prepare/pkg.yaml
-@@ -9,6 +9,10 @@ steps:
-         destination: linux.tar.xz
-         sha256: "{{ .linux_sha256 }}"
-         sha512: "{{ .linux_sha512 }}"
-+      - url: https://github.com/t2linux/linux-t2-patches/archive/0d1e1094a6200579e400e5ca493562c31f7b715a.tar.gz
+@@ -13,6 +13,10 @@ steps:
+         destination: kspp.tar.gz
+         sha256: "{{ .kspp_sha256 }}"
+         sha512: "{{ .kspp_sha512 }}"
++      - url: https://github.com/t2linux/linux-t2-patches/archive/804c76852d22ea09551192e8a2ddbd4489e5ba56.tar.gz
 +        destination: patches.tar.gz
-+        sha256: 54b9b1b15550622c024e788c3fb6944abe751154f6f10a984c134c5e87d7e0d4
-+        sha512: ea5767ef9eb9598bff803a926db80dc7021cceb92856866e161bb27af824406ceb765ce5c44361bd9f61c6b1be42fa48fc6ef1f6cb461794b4036a0df1025fa5
++        sha256: 377a94261d929175f1ce2eeb83f341fb77d52a3e1e0fd598415040af42830d39
++        sha512: 61d57c7c3478e500d5379dea004f5b92ccf427f3c4883b49eb6294921012294b6b40abee420346b4a3fc721d9a09568b911a5e29d60ba41dc5df48015eae917b
      env:
        ARCH: {{ if eq .ARCH "aarch64"}}arm64{{ else if eq .ARCH "x86_64" }}x86_64{{ else }}unsupported{{ end }}
      prepare:
-@@ -39,6 +43,14 @@ steps:
-         done
+@@ -22,6 +26,14 @@ steps:
  
+         cd /src
          make mrproper
 +      - |
 +        mkdir -p /pkg/patches
@@ -49,11 +39,8 @@ index f82ddcf..8f8f633 100644
 +      - |
 +        while IFS= read -r file; do
 +          echo "==> Adding $file"
-+          patch -p1 < "$file"
++          patch --batch -d /src -p1 < "$file"
 +        done < <(find "/pkg/patches/" -type f -name "*.patch" | sort)
        - |
-         cd /toolchain && git clone https://github.com/a13xp0p0v/kernel-hardening-checker.git
-     install:
--- 
-2.46.0
-
+         mkdir -p /toolchain/kernel-hardening-checker
+         tar -xzf kspp.tar.gz --strip-components=1 -C /toolchain/kernel-hardening-checker

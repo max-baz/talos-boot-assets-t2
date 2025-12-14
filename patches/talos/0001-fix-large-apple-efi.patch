@@ -1,28 +1,5 @@
-From 2d374a1f9960ec2b69c0af2639908f8a06119143 Mon Sep 17 00:00:00 2001
-From: Steven Kreitzer <skre@skre.me>
-Date: Mon, 23 Sep 2024 15:29:54 -0500
-Subject: [PATCH] fix: large apple efi
-
----
- internal/pkg/partition/constants.go | 2 +-
- pkg/imager/profile/default.go       | 2 +-
- 2 files changed, 2 insertions(+), 2 deletions(-)
-
-diff --git a/internal/pkg/partition/constants.go b/internal/pkg/partition/constants.go
-index 0f2c8d17f..756c4b101 100644
---- a/internal/pkg/partition/constants.go
-+++ b/internal/pkg/partition/constants.go
-@@ -32,7 +32,7 @@ const (
- 	MiB = 1024 * 1024
- 	GiB = 1024 * MiB
- 
--	EFISize      = 100 * MiB
-+	EFISize      = 500 * MiB
- 	BIOSGrubSize = 1 * MiB
- 	BootSize     = 1000 * MiB
- 	// EFIUKISize is the size of the EFI partition when UKI is enabled.
 diff --git a/pkg/imager/profile/default.go b/pkg/imager/profile/default.go
-index b780ff3ef..4acc7f04f 100644
+index 5c7b6d645..6bc5fd6b6 100644
 --- a/pkg/imager/profile/default.go
 +++ b/pkg/imager/profile/default.go
 @@ -14,7 +14,7 @@ const (
@@ -34,6 +11,16 @@ index b780ff3ef..4acc7f04f 100644
  
  	// DefaultRAWDiskSize is the value we use for any non-metal images by default.
  	DefaultRAWDiskSize = 8192 * mib
--- 
-2.46.0
-
+diff --git a/pkg/machinery/imager/quirks/partitions.go b/pkg/machinery/imager/quirks/partitions.go
+index 4247d8016..2a1ad8357 100644
+--- a/pkg/machinery/imager/quirks/partitions.go
++++ b/pkg/machinery/imager/quirks/partitions.go
+@@ -16,7 +16,7 @@ const (
+ 
+ // GrubEFISize return EFI partition size for GRUB layout.
+ func (p PartitionSizes) GrubEFISize() uint64 {
+-	return 100 * mib
++	return 500 * mib
+ }
+ 
+ // GrubBIOSSize return BIOS GRUB partition size.
