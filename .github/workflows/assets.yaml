@@ -8,8 +8,6 @@ on:
         description: Talos version
         default: latest
         required: false
-  schedule:
-    - cron: "0 * * * *"
 
 concurrency:
   group: ${{ github.actor }}-build
