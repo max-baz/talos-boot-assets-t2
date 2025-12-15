@@ -61,7 +61,7 @@ jobs:
 
   build-kernel:
     needs: [check-releases]
-    name: Build kernel image
+    name: Build custom kernel image
     runs-on: ubuntu-latest
 
     steps:
@@ -143,13 +143,14 @@ jobs:
             TAG="${{ needs.check-releases.outputs.talosReleaseTag }}" \
             PUSH="true"
 
-  build-installer:
+  build-boot-assets:
     needs: [check-releases, build-kernel]
-    name: Build installer image
+    name: Build boot assets with custom kernel
     runs-on: ubuntu-latest
 
-    outputs:
-      installer-exists: ${{ steps.check-installer.outputs.exists }}
+    permissions:
+      contents: write
+      packages: write
 
     steps:
       - name: Login to GitHub Container Registry
@@ -170,88 +171,41 @@ jobs:
             echo "Installer image does not exist, will build"
           fi
 
-      - name: Checkout
+      - name: Create output directory
         if: steps.check-installer.outputs.exists == 'false'
-        uses: actions/checkout@v4
-        with:
-          repository: siderolabs/talos
-          ref: refs/tags/${{ needs.check-releases.outputs.talosReleaseTag }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          fetch-depth: 0
+        run: mkdir -p _out
 
-      - name: Checkout patches
-        if: steps.check-installer.outputs.exists == 'false'
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository }}
-          ref: ${{ github.sha }}
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: patches
-          sparse-checkout: patches/talos
-          sparse-checkout-cone-mode: false
-
-      - name: Apply patches
+      - name: Build custom installer with official imager
         if: steps.check-installer.outputs.exists == 'false'
         run: |
-          while IFS= read -r file; do
-            echo "==> Adding $file"
-            git apply -v $file
-          done < <(find "./patches/patches/talos" -type f -name "*.patch" | sort)
-
-      - name: Set up QEMU
-        if: steps.check-installer.outputs.exists == 'false'
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        if: steps.check-installer.outputs.exists == 'false'
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build installer image
-        if: steps.check-installer.outputs.exists == 'false'
-        run: |
-          make installer \
-            PLATFORM="linux/amd64" \
-            USERNAME="${{ github.actor }}" \
-            TAG="${{ needs.check-releases.outputs.talosReleaseTag }}" \
-            PKG_KERNEL="ghcr.io/${{ github.actor }}/kernel:${{ needs.check-releases.outputs.talosReleaseTag }}" \
-            PUSH="true"
-
-  build-boot-assets:
-    needs: [check-releases, build-installer]
-    if: needs.build-installer.outputs.installer-exists == 'false'
-    name: Build boot assets
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
-    container:
-      image: ghcr.io/${{ github.actor }}/installer:${{ needs.check-releases.outputs.talosReleaseTag }}
-      options: --privileged
-      volumes:
-        - /dev:/dev
-
-    steps:
-      - name: Build amd64 installer with I915 & Intel Ucode
-        run: |
-          /bin/imager installer \
+          docker run --rm -t \
+            -v ${{ github.workspace }}/_out:/out \
+            -v /dev:/dev \
+            --privileged \
+            ghcr.io/siderolabs/imager:${{ needs.check-releases.outputs.talosReleaseTag }} \
+            installer \
             --arch amd64 \
-            --base-installer-image ghcr.io/${{ github.actor }}/installer:${{ needs.check-releases.outputs.talosReleaseTag }} \
+            --base-installer-image ghcr.io/siderolabs/installer:${{ needs.check-releases.outputs.talosReleaseTag }} \
+            --system-extension-image ghcr.io/${{ github.actor }}/kernel:${{ needs.check-releases.outputs.talosReleaseTag }} \
             --system-extension-image ghcr.io/siderolabs/i915-ucode:${{ env.I915_UCODE_VERSION }} \
             --system-extension-image ghcr.io/siderolabs/intel-ucode:${{ env.INTEL_UCODE_VERSION }}
 
       - name: Upload installer artifact
+        if: steps.check-installer.outputs.exists == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: talos-installer
-          path: /out/installer-amd64.tar
+          path: _out/installer-amd64.tar
           if-no-files-found: error
           retention-days: 1
 
+    outputs:
+      installer-exists: ${{ steps.check-installer.outputs.exists }}
+
   push-installer-image:
-    needs: [check-releases, build-boot-assets, build-installer]
-    if: needs.build-installer.outputs.installer-exists == 'false'
-    name: Push installer image
+    needs: [check-releases, build-boot-assets]
+    if: needs.build-boot-assets.outputs.installer-exists == 'false'
+    name: Push custom installer image
     runs-on: ubuntu-latest
 
     permissions:
@@ -278,7 +232,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: imjasonh/setup-crane@v0.4
+      - name: Install crane
+        uses: imjasonh/setup-crane@v0.4
+
       - name: Push installer image
         run: |
           crane push \
