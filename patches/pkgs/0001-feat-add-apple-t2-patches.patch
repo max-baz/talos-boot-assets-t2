@@ -1,5 +1,5 @@
 diff --git a/kernel/build/pkg.yaml b/kernel/build/pkg.yaml
-index f797dd4..88aea60 100644
+index f797dd4..84591fe 100644
 --- a/kernel/build/pkg.yaml
 +++ b/kernel/build/pkg.yaml
 @@ -15,9 +15,14 @@ steps:
@@ -7,8 +7,9 @@ index f797dd4..88aea60 100644
          cd /src
          for patch in $(find /pkg/patches -type f -name "*.patch" | sort); do
 -          patch -p1 < $patch || (echo "Failed to apply patch $patch" && exit 1)
-+          patch --batch -N -d /src -p1 < $patch || (echo "Failed to apply patch $patch" && exit 1)
-           echo "Applied patch $patch"
+-          echo "Applied patch $patch"
++          echo "==> Applying patch $patch"
++          patch --batch -N -d /src -p1 < $patch
          done
 +      - |
 +        cd /src
@@ -19,7 +20,7 @@ index f797dd4..88aea60 100644
        {{ if .BUILD_ARG_KERNEL_TARGET }}
        - |
 diff --git a/kernel/prepare/pkg.yaml b/kernel/prepare/pkg.yaml
-index 6408110..9f840a6 100644
+index 6408110..73e4368 100644
 --- a/kernel/prepare/pkg.yaml
 +++ b/kernel/prepare/pkg.yaml
 @@ -13,6 +13,10 @@ steps:
@@ -33,18 +34,13 @@ index 6408110..9f840a6 100644
      env:
        ARCH: {{ if eq .ARCH "aarch64"}}arm64{{ else if eq .ARCH "x86_64" }}x86_64{{ else }}unsupported{{ end }}
      prepare:
-@@ -22,6 +26,14 @@ steps:
+@@ -22,6 +26,9 @@ steps:
  
          cd /src
          make mrproper
 +      - |
 +        mkdir -p /pkg/patches
 +        tar xf patches.tar.gz --strip-components=1 -C /pkg/patches
-+      - |
-+        while IFS= read -r file; do
-+          echo "==> Adding $file"
-+          patch --batch -N -d /src -p1 < "$file"
-+        done < <(find "/pkg/patches/" -type f -name "*.patch" | sort)
        - |
          mkdir -p /toolchain/kernel-hardening-checker
          tar -xzf kspp.tar.gz --strip-components=1 -C /toolchain/kernel-hardening-checker
