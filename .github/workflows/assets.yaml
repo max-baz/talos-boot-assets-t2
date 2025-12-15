@@ -61,18 +61,37 @@ jobs:
 
   build-kernel:
     needs: [check-releases]
-    if: needs.check-releases.outputs.newTalosReleaseFound || github.event_name == 'workflow_dispatch'
     name: Build kernel image
     runs-on: ubuntu-latest
 
     steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if kernel image already exists
+        id: check-kernel
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.actor }}/kernel:${{ needs.check-releases.outputs.talosReleaseTag }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Kernel image already exists, skipping build"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Kernel image does not exist, will build"
+          fi
+
       - name: Get pkgs release tag
+        if: steps.check-kernel.outputs.exists == 'false'
         id: pkgs-release
         run: |
           release=release-$(grep -Eo '[0-9]\.[0-9]+' <<< '${{ needs.check-releases.outputs.talosReleaseTag }}')
           echo "release=$release" >> $GITHUB_OUTPUT
 
       - name: Checkout
+        if: steps.check-kernel.outputs.exists == 'false'
         uses: actions/checkout@v4
         with:
           repository: siderolabs/pkgs
@@ -81,6 +100,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout patches
+        if: steps.check-kernel.outputs.exists == 'false'
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository }}
@@ -91,6 +111,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Apply patches
+        if: steps.check-kernel.outputs.exists == 'false'
         run: |
           while IFS= read -r file; do
             echo "==> Adding $file"
@@ -98,6 +119,7 @@ jobs:
           done < <(find "./patches/patches/pkgs" -type f -name "*.patch" | sort)
 
       - name: Maximize build space
+        if: steps.check-kernel.outputs.exists == 'false'
         uses: jlumbroso/free-disk-space@main
         with:
           large-packages: true
@@ -105,19 +127,15 @@ jobs:
           swap-storage: true
 
       - name: Set up QEMU
+        if: steps.check-kernel.outputs.exists == 'false'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: steps.check-kernel.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3.3.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build kernel image
+        if: steps.check-kernel.outputs.exists == 'false'
         run: |
           make kernel \
             PLATFORM=linux/amd64 \
@@ -127,12 +145,33 @@ jobs:
 
   build-installer:
     needs: [check-releases, build-kernel]
-    if: needs.check-releases.outputs.newTalosReleaseFound || github.event_name == 'workflow_dispatch'
     name: Build installer image
     runs-on: ubuntu-latest
 
+    outputs:
+      installer-exists: ${{ steps.check-installer.outputs.exists }}
+
     steps:
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if installer image already exists
+        id: check-installer
+        run: |
+          if docker manifest inspect ghcr.io/${{ github.actor }}/installer:${{ needs.check-releases.outputs.talosReleaseTag }} > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Installer image already exists, skipping build"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Installer image does not exist, will build"
+          fi
+
       - name: Checkout
+        if: steps.check-installer.outputs.exists == 'false'
         uses: actions/checkout@v4
         with:
           repository: siderolabs/talos
@@ -141,6 +180,7 @@ jobs:
           fetch-depth: 0
 
       - name: Checkout patches
+        if: steps.check-installer.outputs.exists == 'false'
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository }}
@@ -151,6 +191,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Apply patches
+        if: steps.check-installer.outputs.exists == 'false'
         run: |
           while IFS= read -r file; do
             echo "==> Adding $file"
@@ -158,19 +199,15 @@ jobs:
           done < <(find "./patches/patches/talos" -type f -name "*.patch" | sort)
 
       - name: Set up QEMU
+        if: steps.check-installer.outputs.exists == 'false'
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
+        if: steps.check-installer.outputs.exists == 'false'
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3.3.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Build installer image
+        if: steps.check-installer.outputs.exists == 'false'
         env:
           BUILDKIT_PROGRESS: plain
         run: |
@@ -183,7 +220,7 @@ jobs:
 
   build-boot-assets:
     needs: [check-releases, build-installer]
-    if: needs.check-releases.outputs.newTalosReleaseFound || github.event_name == 'workflow_dispatch'
+    if: needs.build-installer.outputs.installer-exists == 'false'
     name: Build boot assets
     runs-on: ubuntu-latest
 
@@ -214,7 +251,8 @@ jobs:
           retention-days: 1
 
   push-installer-image:
-    needs: [check-releases, build-boot-assets]
+    needs: [check-releases, build-boot-assets, build-installer]
+    if: needs.build-installer.outputs.installer-exists == 'false'
     name: Push installer image
     runs-on: ubuntu-latest
 
@@ -249,26 +287,3 @@ jobs:
             --platform linux/amd64 \
             /tmp/talos-build-assets/installer-amd64.tar \
             ghcr.io/${{ github.actor }}/installer:${{ needs.check-releases.outputs.talosReleaseTag }}
-
-  create-release:
-    needs: [check-releases, push-installer-image]
-    if: needs.check-releases.outputs.newTalosReleaseFound
-    name: Create a new release
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: write
-
-    steps:
-      - name: Fetch Talos release body
-        id: talos-release-body
-        run: |
-          echo 'talos_release_body<<EOF' >> $GITHUB_OUTPUT
-          curl -sL https://api.github.com/repos/siderolabs/talos/releases/tags/${{ needs.check-releases.outputs.talosReleaseTag }} | jq -r ".body" >> $GITHUB_OUTPUT
-          echo EOF >> $GITHUB_OUTPUT
-
-      - name: Create a new release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ needs.check-releases.outputs.talosReleaseTag }}
-          body: ${{ steps.talos-release-body.outputs.talos_release_body }}
