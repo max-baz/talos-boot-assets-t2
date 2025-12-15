@@ -208,8 +208,6 @@ jobs:
 
       - name: Build installer image
         if: steps.check-installer.outputs.exists == 'false'
-        env:
-          BUILDKIT_PROGRESS: plain
         run: |
           make installer \
             PLATFORM="linux/amd64" \
