@@ -1,9 +1,13 @@
 diff --git a/kernel/build/pkg.yaml b/kernel/build/pkg.yaml
-index f797dd4..5dea289 100644
+index f797dd4..88aea60 100644
 --- a/kernel/build/pkg.yaml
 +++ b/kernel/build/pkg.yaml
-@@ -18,6 +18,11 @@ steps:
-           patch -p1 < $patch || (echo "Failed to apply patch $patch" && exit 1)
+@@ -15,9 +15,14 @@ steps:
+       - |
+         cd /src
+         for patch in $(find /pkg/patches -type f -name "*.patch" | sort); do
+-          patch -p1 < $patch || (echo "Failed to apply patch $patch" && exit 1)
++          patch --batch -N -d /src -p1 < $patch || (echo "Failed to apply patch $patch" && exit 1)
            echo "Applied patch $patch"
          done
 +      - |
@@ -15,7 +19,7 @@ index f797dd4..5dea289 100644
        {{ if .BUILD_ARG_KERNEL_TARGET }}
        - |
 diff --git a/kernel/prepare/pkg.yaml b/kernel/prepare/pkg.yaml
-index 6408110..7242354 100644
+index 6408110..9f840a6 100644
 --- a/kernel/prepare/pkg.yaml
 +++ b/kernel/prepare/pkg.yaml
 @@ -13,6 +13,10 @@ steps:
@@ -39,7 +43,7 @@ index 6408110..7242354 100644
 +      - |
 +        while IFS= read -r file; do
 +          echo "==> Adding $file"
-+          patch --batch -d /src -p1 < "$file"
++          patch --batch -N -d /src -p1 < "$file"
 +        done < <(find "/pkg/patches/" -type f -name "*.patch" | sort)
        - |
          mkdir -p /toolchain/kernel-hardening-checker
